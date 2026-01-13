@@ -1359,6 +1359,10 @@ public:
   /// in device compilation.
   llvm::DenseSet<const FunctionDecl *> CUDAImplicitHostDeviceFunUsedByDevice;
 
+  /// Keep track of indirect call expressions within OpenMP target regions.
+  /// Used to instert calls to __llvm_omp_indirect_call_lookup during codegen.
+  llvm::DenseSet<const CallExpr *> OMPTargetCalls;
+
   /// Map of SYCL kernels indexed by the unique type used to name the kernel.
   /// Entries are not serialized but are recreated on deserialization of a
   /// sycl_kernel_entry_point attributed function declaration.
