@@ -432,26 +432,31 @@ static void processHostEvalClauses(lower::AbstractConverter &converter,
       clauses.append(makeClauses(*endClauseList, semaCtx));
   };
 
-  // Return the directive that is immediately nested inside of the given
+  // Return the first directive that is immediately nested inside of the given
   // `parent` evaluation, if it is its only non-end-statement nested evaluation
   // and it represents an OpenMP construct.
-  auto extractOnlyOmpNestedDir = [](lower::pft::Evaluation &parent)
+  auto extractOnlyOmpNestedDir =
+      [](lower::pft::Evaluation &parent,
+         lower::pft::Evaluation **outNestedEval = nullptr)
       -> std::optional<llvm::omp::Directive> {
     if (!parent.hasNestedEvaluations())
       return std::nullopt;
 
     llvm::omp::Directive dir;
-    auto &nested = parent.getFirstNestedEvaluation();
-    if (const auto *ompEval = nested.getIf<parser::OpenMPConstruct>())
-      dir = parser::omp::GetOmpDirectiveName(*ompEval).v;
-    else
-      return std::nullopt;
+    lower::pft::Evaluation *foundEval = nullptr;
+    for (auto &nested : parent.getNestedEvaluations()) {
+      if (const auto *ompEval = nested.getIf<parser::OpenMPConstruct>()) {
+        if (foundEval && !nested.isEndStmt()) {
+          return std::nullopt;
+        }
+        foundEval = &nested;
+        dir = parser::omp::GetOmpDirectiveName(*ompEval).v;
+      }
+    }
+    if (foundEval && outNestedEval)
+      *outNestedEval = foundEval;
 
-    for (auto &sibling : parent.getNestedEvaluations())
-      if (&sibling != &nested && !sibling.isEndStmt())
-        return std::nullopt;
-
-    return dir;
+    return foundEval ? std::optional<llvm::omp::Directive>{dir} : std::nullopt;
   };
 
   // Process the given evaluation assuming it's part of a 'target' construct or
@@ -466,11 +471,14 @@ static void processHostEvalClauses(lower::AbstractConverter &converter,
     // its corresponding clauses if there is a single nested evaluation
     // representing an OpenMP directive that passes the given test.
     auto processSingleNestedIf = [&](llvm::function_ref<bool(Directive)> test) {
-      std::optional<Directive> nestedDir = extractOnlyOmpNestedDir(eval);
+      lower::pft::Evaluation *nestedEvalPtr = nullptr;
+      std::optional<Directive> nestedDir =
+          extractOnlyOmpNestedDir(eval, &nestedEvalPtr);
       if (!nestedDir || !test(*nestedDir))
         return;
 
-      lower::pft::Evaluation &nestedEval = eval.getFirstNestedEvaluation();
+      assert(nestedEvalPtr && "expected nested evaluation to be set");
+      lower::pft::Evaluation &nestedEval = *nestedEvalPtr;
       List<lower::omp::Clause> nestedClauses;
       extractClauses(nestedEval, nestedClauses);
       processEval(nestedEval, nestedClauses);
