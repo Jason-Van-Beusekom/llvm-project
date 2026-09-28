@@ -34,9 +34,12 @@ llvm::Constant *createSourceLocStrFromLocation(Location loc,
                                                bool ForOffloadMap = false);
 
 /// Create a constant string representing the mapping information extracted from
-/// the MLIR location information.
+/// the MLIR location information. A non-empty \p mapName takes precedence over
+/// any name carried by \p loc (e.g. a NameLoc), so callers can supply the map
+/// operation's `name` attribute directly.
 llvm::Constant *createMappingInformation(Location loc,
-                                         llvm::OpenMPIRBuilder &builder);
+                                         llvm::OpenMPIRBuilder &builder,
+                                         StringRef mapName = {});
 
 } // namespace LLVM
 } // namespace mlir

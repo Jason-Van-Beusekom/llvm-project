@@ -29,6 +29,7 @@
 #include "flang/Optimizer/Dialect/Support/KindMapping.h"
 #include "flang/Optimizer/HLFIR/HLFIROps.h"
 #include "flang/Optimizer/OpenMP/Passes.h"
+#include "flang/Optimizer/Support/InternalNames.h"
 #include "flang/Utils/OpenMP.h"
 
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -73,6 +74,8 @@ class MapsForPrivatizedSymbolsPass
     Operation *definingOp = var.getDefiningOp();
 
     Value varPtr = var;
+    // Source-level name so info output matches explicitly-mapped variables.
+    mlir::StringAttr mapName;
     // We want the first result of the hlfir.declare op because our goal
     // is to map the descriptor (fir.box or fir.boxchar) and the first
     // result for hlfir.declare is the descriptor if a the symbol being
@@ -80,8 +83,13 @@ class MapsForPrivatizedSymbolsPass
     // Some types are boxed immediately before privatization. These have other
     // operations in between the privatization and the declaration. It is safe
     // to use var directly here because they will be boxed anyway.
-    if (auto declOp = llvm::dyn_cast_if_present<hlfir::DeclareOp>(definingOp))
+    if (auto declOp = llvm::dyn_cast_if_present<hlfir::DeclareOp>(definingOp)) {
       varPtr = declOp.getBase();
+      std::string sourceName =
+          fir::NameUniquer::deconstruct(declOp.getUniqName()).second.name;
+      if (!sourceName.empty())
+        mapName = builder.getStringAttr(sourceName);
+    }
 
     // If we do not have a reference to a descriptor but the descriptor itself,
     // then we need to store that on the stack so that we can map the
@@ -156,7 +164,7 @@ class MapsForPrivatizedSymbolsPass
         /*members=*/SmallVector<Value>{},
         /*member_index=*/mlir::ArrayAttr{},
         /*bounds=*/boundsOps,
-        /*mapperId=*/mapperId, /*name=*/StringAttr(),
+        /*mapperId=*/mapperId, /*name=*/mapName,
         builder.getBoolAttr(false));
   }
   void addMapInfoOp(omp::TargetOp targetOp, omp::MapInfoOp mapInfoOp) {
