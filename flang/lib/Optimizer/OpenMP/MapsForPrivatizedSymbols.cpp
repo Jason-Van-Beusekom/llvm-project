@@ -54,9 +54,23 @@ class MapsForPrivatizedSymbolsPass
     : public flangomp::impl::MapsForPrivatizedSymbolsPassBase<
           MapsForPrivatizedSymbolsPass> {
 
+  // Recover the Fortran source name from a delayed-privatizer symbol such as
+  // "_QFEarr_firstprivate_box_4xi32" -> "arr", used when the privatized value
+  // is a compiler-created descriptor with no hlfir.declare to name it.
+  static std::string getPrivatizerSourceName(omp::PrivateClauseOp privatizer) {
+    llvm::StringRef symName = privatizer.getSymName();
+    size_t pos = symName.rfind("_firstprivate_");
+    if (pos == llvm::StringRef::npos)
+      pos = symName.rfind("_private_");
+    if (pos != llvm::StringRef::npos)
+      symName = symName.take_front(pos);
+    return fir::NameUniquer::deconstruct(symName).second.name;
+  }
+
   // TODO Use `createMapInfoOp` from `flang/Utils/OpenMP.h`.
   omp::MapInfoOp createMapInfo(Location loc, Value var,
-                               fir::FirOpBuilder &builder) {
+                               fir::FirOpBuilder &builder,
+                               llvm::StringRef fallbackName = {}) {
     // Check if a value of type `type` can be passed to the kernel by value.
     // All kernel parameters are of pointer type, so if the value can be
     // represented inside of a pointer, then it can be passed by value.
@@ -90,6 +104,10 @@ class MapsForPrivatizedSymbolsPass
       if (!sourceName.empty())
         mapName = builder.getStringAttr(sourceName);
     }
+    // Boxed values (e.g. arrays) map an anonymous descriptor with no declare;
+    // fall back to the name recovered from the privatizer symbol.
+    if (!mapName && !fallbackName.empty())
+      mapName = builder.getStringAttr(fallbackName);
 
     // If we do not have a reference to a descriptor but the descriptor itself,
     // then we need to store that on the stack so that we can map the
@@ -211,7 +229,8 @@ class MapsForPrivatizedSymbolsPass
 
         builder.setInsertionPoint(targetOp);
         Location loc = targetOp.getLoc();
-        omp::MapInfoOp mapInfoOp = createMapInfo(loc, privVar, builder);
+        omp::MapInfoOp mapInfoOp = createMapInfo(
+            loc, privVar, builder, getPrivatizerSourceName(privatizer));
         mapInfoOps.push_back(mapInfoOp);
 
         LLVM_DEBUG(PDBGS() << "MapsForPrivatizedSymbolsPass created ->\n"
