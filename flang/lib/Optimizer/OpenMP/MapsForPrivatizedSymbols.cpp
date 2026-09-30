@@ -29,7 +29,6 @@
 #include "flang/Optimizer/Dialect/Support/KindMapping.h"
 #include "flang/Optimizer/HLFIR/HLFIROps.h"
 #include "flang/Optimizer/OpenMP/Passes.h"
-#include "flang/Optimizer/Support/InternalNames.h"
 #include "flang/Utils/OpenMP.h"
 
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -54,23 +53,9 @@ class MapsForPrivatizedSymbolsPass
     : public flangomp::impl::MapsForPrivatizedSymbolsPassBase<
           MapsForPrivatizedSymbolsPass> {
 
-  // Recover the Fortran source name from a delayed-privatizer symbol such as
-  // "_QFEarr_firstprivate_box_4xi32" -> "arr", used when the privatized value
-  // is a compiler-created descriptor with no hlfir.declare to name it.
-  static std::string getPrivatizerSourceName(omp::PrivateClauseOp privatizer) {
-    llvm::StringRef symName = privatizer.getSymName();
-    size_t pos = symName.rfind("_firstprivate_");
-    if (pos == llvm::StringRef::npos)
-      pos = symName.rfind("_private_");
-    if (pos != llvm::StringRef::npos)
-      symName = symName.take_front(pos);
-    return fir::NameUniquer::deconstruct(symName).second.name;
-  }
-
   // TODO Use `createMapInfoOp` from `flang/Utils/OpenMP.h`.
   omp::MapInfoOp createMapInfo(Location loc, Value var,
-                               fir::FirOpBuilder &builder,
-                               llvm::StringRef fallbackName = {}) {
+                               fir::FirOpBuilder &builder) {
     // Check if a value of type `type` can be passed to the kernel by value.
     // All kernel parameters are of pointer type, so if the value can be
     // represented inside of a pointer, then it can be passed by value.
@@ -88,8 +73,6 @@ class MapsForPrivatizedSymbolsPass
     Operation *definingOp = var.getDefiningOp();
 
     Value varPtr = var;
-    // Source-level name so info output matches explicitly-mapped variables.
-    mlir::StringAttr mapName;
     // We want the first result of the hlfir.declare op because our goal
     // is to map the descriptor (fir.box or fir.boxchar) and the first
     // result for hlfir.declare is the descriptor if a the symbol being
@@ -97,17 +80,8 @@ class MapsForPrivatizedSymbolsPass
     // Some types are boxed immediately before privatization. These have other
     // operations in between the privatization and the declaration. It is safe
     // to use var directly here because they will be boxed anyway.
-    if (auto declOp = llvm::dyn_cast_if_present<hlfir::DeclareOp>(definingOp)) {
+    if (auto declOp = llvm::dyn_cast_if_present<hlfir::DeclareOp>(definingOp))
       varPtr = declOp.getBase();
-      std::string sourceName =
-          fir::NameUniquer::deconstruct(declOp.getUniqName()).second.name;
-      if (!sourceName.empty())
-        mapName = builder.getStringAttr(sourceName);
-    }
-    // Boxed values (e.g. arrays) map an anonymous descriptor with no declare;
-    // fall back to the name recovered from the privatizer symbol.
-    if (!mapName && !fallbackName.empty())
-      mapName = builder.getStringAttr(fallbackName);
 
     // If we do not have a reference to a descriptor but the descriptor itself,
     // then we need to store that on the stack so that we can map the
@@ -182,7 +156,7 @@ class MapsForPrivatizedSymbolsPass
         /*members=*/SmallVector<Value>{},
         /*member_index=*/mlir::ArrayAttr{},
         /*bounds=*/boundsOps,
-        /*mapperId=*/mapperId, /*name=*/mapName,
+        /*mapperId=*/mapperId, /*name=*/StringAttr(),
         builder.getBoolAttr(false));
   }
   void addMapInfoOp(omp::TargetOp targetOp, omp::MapInfoOp mapInfoOp) {
@@ -229,8 +203,7 @@ class MapsForPrivatizedSymbolsPass
 
         builder.setInsertionPoint(targetOp);
         Location loc = targetOp.getLoc();
-        omp::MapInfoOp mapInfoOp = createMapInfo(
-            loc, privVar, builder, getPrivatizerSourceName(privatizer));
+        omp::MapInfoOp mapInfoOp = createMapInfo(loc, privVar, builder);
         mapInfoOps.push_back(mapInfoOp);
 
         LLVM_DEBUG(PDBGS() << "MapsForPrivatizedSymbolsPass created ->\n"
