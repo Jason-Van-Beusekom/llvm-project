@@ -4491,7 +4491,7 @@ Error AMDGPUKernelTy::printLaunchInfoDetails(
     GenericDeviceTy &GenericDevice, const KernelLaunchArgsTy &LaunchArgs,
     uint32_t NumThreads[3], uint32_t NumBlocks[3]) const {
   // Only do all this when the output is requested
-  if (!(getInfoLevel() & OMP_INFOTYPE_PLUGIN_KERNEL))
+  if (!SHOULD_PRINT_INFO(OMP_INFOTYPE_PLUGIN_KERNEL))
     return Plugin::success();
 
   // General Info
@@ -4521,7 +4521,7 @@ Error AMDGPUKernelTy::printLaunchInfoDetails(
   // S/VGPR Count: the number of S/V GPRs occupied by the kernel
   // S/VGPR Spill Count: how many S/VGPRs are spilled by the kernel
   // Tripcount: loop tripcount for the kernel
-  INFO(OMP_INFOTYPE_PLUGIN_KERNEL, GenericDevice.getDeviceId(),
+  INFO_LEVEL(2, OMP_INFOTYPE_PLUGIN_KERNEL, GenericDevice.getDeviceId(),
        "#Args: %d Teams x Thrds: %4ux%4u (MaxFlatWorkGroupSize: %u) LDS "
        "Usage: %uB #SGPRs/VGPRs: %u/%u #SGPR/VGPR Spills: %u/%u Tripcount: "
        "%lu\n",

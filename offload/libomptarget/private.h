@@ -50,7 +50,7 @@ printKernelArguments(const ident_t *Loc, const int64_t DeviceId,
                      const int64_t *ArgTypes, const map_var_info_t *ArgNames,
                      const char *RegionType) {
   SourceInfo Info(Loc);
-  INFO(OMP_INFOTYPE_ALL, DeviceId, "%s at %s:%d:%d with %d arguments:\n",
+  INFO(OMP_INFOTYPE_KERNEL_ARGS, DeviceId, "%s at %s:%d:%d with %d arguments:\n",
        RegionType, Info.getFilename(), Info.getLine(), Info.getColumn(),
        ArgNum);
 
@@ -81,7 +81,8 @@ printKernelArguments(const ident_t *Loc, const int64_t DeviceId,
     else
       Type = "use_address";
 
-    INFO(OMP_INFOTYPE_ALL, DeviceId, "%s(%s)[%" PRId64 "] %s\n", Type,
+    INFO_LEVEL(2, OMP_INFOTYPE_KERNEL_ARGS, DeviceId,
+               "%s(%s)[%" PRId64 "] %s\n", Type,
          getNameFromMapping(VarName).c_str(), ArgSizes[I], Implicit);
   }
 }
@@ -91,7 +92,7 @@ printKernelArguments(const ident_t *Loc, const int64_t DeviceId,
 /// asynchronous operations (data transfers and kernels) to complete.
 static inline void printSyncInfo(const ident_t *Loc, const int64_t DeviceId,
                                  const AsyncInfoTy &AsyncInfo) {
-  if (!(getInfoLevel() & OMP_INFOTYPE_DATA_TRANSFER))
+  if (!SHOULD_PRINT_INFO(OMP_INFOTYPE_DATA_TRANSFER))
     return;
   if (AsyncInfo.SyncType != AsyncInfoTy::SyncTy::BLOCKING)
     return;

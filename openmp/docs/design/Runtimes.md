@@ -722,11 +722,16 @@ variables is defined below.
 
 #### LIBOMPTARGET_DEBUG
 
-`LIBOMPTARGET_DEBUG` controls whether or not debugging information will be
-displayed. This feature is only available if `libomptarget` was built with
-`-DOMPTARGET_DEBUG`. The debugging output provided is intended for use by
-`libomptarget` developers. More user-friendly output is presented when using
-`LIBOMPTARGET_INFO`.
+`LIBOMPTARGET_DEBUG` enables debugging output and selects which messages are
+shown. Its value is either a numeric verbosity level (higher levels show more
+detail) or a comma-separated list of `Type[:Level]` filters, for example
+`LIBOMPTARGET_DEBUG=Kernel:2,Mapping`. The low-level developer trace is only
+available when `libomptarget` was built with `-DOMPTARGET_DEBUG`, but the
+numeric level and the `Type:Level` filters also control the user-facing
+information messages described in {ref}`libomptarget_info` in any build. The
+debug types matching the `LIBOMPTARGET_INFO` categories are `KernelArgs`,
+`MappingExists`, `DumpTable`, `MappingChanged`, `PluginKernel`, `DataTransfer`,
+and `EmptyMapping`.
 
 #### LIBOMPTARGET_PROFILE
 
@@ -790,6 +795,15 @@ Or, to enable every flag run with every bit set.
 ```console
 $ env LIBOMPTARGET_INFO=-1 ./your-application
 ```
+
+The same information messages can also be selected with `LIBOMPTARGET_DEBUG`
+using debug-type names (see {ref}`LIBOMPTARGET_DEBUG`). Each `LIBOMPTARGET_INFO`
+bit corresponds to a debug type: `0x01` `KernelArgs`, `0x02` `MappingExists`,
+`0x04` `DumpTable`, `0x08` `MappingChanged`, `0x10` `PluginKernel`, `0x20`
+`DataTransfer`, `0x40` `EmptyMapping`. For example,
+`LIBOMPTARGET_DEBUG=DataTransfer` shows only the data-transfer messages, and
+`LIBOMPTARGET_DEBUG=PluginKernel:2` additionally shows the detailed per-kernel
+plugin metrics.
 
 For example, given a small application implementing the `ZAXPY` BLAS routine,
 `Libomptarget` can provide useful information about data mappings and thread

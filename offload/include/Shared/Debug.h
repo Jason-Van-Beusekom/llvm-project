@@ -144,15 +144,18 @@ inline uint32_t getInfoLevel() { return getInfoLevelInternal().load(); }
     fprintf(_stdDst, __VA_ARGS__);                                             \
   } while (0)
 
-/// Emit a message giving the user extra information about the runtime if
-#define INFO(_flags, _id, ...)                                                 \
+/// Emit a message at a given detail level (ODL_Default..). Gated by the single
+/// shouldPrintInfo() predicate, which merges the LIBOMPTARGET_INFO bitmask and
+/// the LIBOMPTARGET_DEBUG type/level filters.
+#define INFO_LEVEL(_level, _flags, _id, ...)                                   \
   do {                                                                         \
-    if (::llvm::offload::debug::isDebugEnabled()) {                            \
-      INFO_DEBUG_INT(_flags, _id, __VA_ARGS__);                                \
-    } else if (getInfoLevel() & _flags) {                                      \
+    if (::llvm::offload::debug::shouldPrintInfo(GETNAME(TARGET_NAME),          \
+                                                (_flags), (_level)))           \
       INFO_MESSAGE(_id, __VA_ARGS__);                                          \
-    }                                                                          \
   } while (false)
+
+/// Emit an info message at the default detail level.
+#define INFO(_flags, _id, ...) INFO_LEVEL(1, _flags, _id, __VA_ARGS__)
 
 #define DUMP_INFO(toStdOut, _flags, _id, ...)                                  \
   do {                                                                         \
@@ -162,6 +165,11 @@ inline uint32_t getInfoLevel() { return getInfoLevelInternal().load(); }
       INFO(_flags, _id, __VA_ARGS__);                                          \
     }                                                                          \
   } while (false)
+
+/// Predicate form of the single INFO gate, for sites that guard an expensive
+/// print call instead of calling INFO directly.
+#define SHOULD_PRINT_INFO(_flags)                                             \
+  ::llvm::offload::debug::shouldPrintInfo(GETNAME(TARGET_NAME), (_flags))
 
 namespace llvm::offload::debug {
 
@@ -267,8 +275,9 @@ public:
 /// dbgs - Return the debug stream for offload debugging (just llvm::errs()).
 [[maybe_unused]] static llvm::raw_ostream &dbgs() { return llvm::errs(); }
 
-#ifdef OMPTARGET_DEBUG
-
+// The debug settings parser and gate below are always compiled so that both
+// LIBOMPTARGET_DEBUG and LIBOMPTARGET_INFO share one filtering model, available
+// in release builds. Only the ODBG emission macros stay behind OMPTARGET_DEBUG.
 struct DebugFilter {
   StringRef Type;
   uint32_t Level;
@@ -411,6 +420,44 @@ static inline raw_ostream &operator<<(raw_ostream &Os,
   return Dbg;
 }
 
+/// Map an OpenMPInfoType category bit to its debug-type name.
+[[maybe_unused]] static const char *infoTypeName(uint32_t Flag) {
+  switch (Flag) {
+  case OMP_INFOTYPE_KERNEL_ARGS:
+    return "KernelArgs";
+  case OMP_INFOTYPE_MAPPING_EXISTS:
+    return "MappingExists";
+  case OMP_INFOTYPE_DUMP_TABLE:
+    return "DumpTable";
+  case OMP_INFOTYPE_MAPPING_CHANGED:
+    return "MappingChanged";
+  case OMP_INFOTYPE_PLUGIN_KERNEL:
+    return "PluginKernel";
+  case OMP_INFOTYPE_DATA_TRANSFER:
+    return "DataTransfer";
+  case OMP_INFOTYPE_EMPTY_MAPPING:
+    return "EmptyMapping";
+  default:
+    return "all";
+  }
+}
+
+/// Single gate for INFO messages: print when the legacy LIBOMPTARGET_INFO
+/// bitmask selects the category, or when the merged LIBOMPTARGET_DEBUG settings
+/// enable the mapped debug type at a level >= the message's level. Always
+/// compiled so LIBOMPTARGET_DEBUG also controls user-facing info output in
+/// release builds.
+[[maybe_unused]] static bool shouldPrintInfo(const char *Component,
+                                             uint32_t Flags,
+                                             uint32_t Level = 1) {
+  if (::getInfoLevel() & Flags)
+    return true;
+  uint32_t L = Level;
+  return shouldPrintDebug(Component, infoTypeName(Flags), L);
+}
+
+#ifdef OMPTARGET_DEBUG
+
 #define ODBG_BASE(Stream, Component, Prefix, Type, Level)                      \
   for (uint32_t RealLevel = (Level),                                           \
                 _c = llvm::offload::debug::isDebugEnabled() &&                 \
@@ -546,8 +593,6 @@ template <typename LambdaTy> struct LambdaIf : public LambdaHelper<LambdaTy> {
 
 #else
 
-inline bool isDebugEnabled() { return false; }
-
 #define ODBG_NULL                                                              \
   for (bool _c = false; _c; _c = false)                                        \
   ::llvm::nulls()
@@ -635,68 +680,11 @@ static inline odbg_ostream reportErrorStream() {
 }
 
 #ifdef OMPTARGET_DEBUG
-// Deprecated debug print macros
-[[maybe_unused]] static std::string formatToStr(const char *format, ...) {
-  va_list args;
-  va_start(args, format);
-  size_t len = std::vsnprintf(NULL, 0, format, args);
-  va_end(args);
-  llvm::SmallVector<char, 128> vec(len + 1);
-  va_start(args, format);
-  std::vsnprintf(&vec[0], len + 1, format, args);
-  va_end(args);
-  return &vec[0];
-}
-
-// helper macro to support old DP and REPORT macros with printf syntax
-#define FORMAT_TO_STR(Format, ...)                                             \
-  ::llvm::omp::target::debug::formatToStr(Format __VA_OPT__(, ) __VA_ARGS__)
-
-template <uint32_t InfoId> static constexpr const char *InfoIdToODT() {
-  constexpr auto getId = []() {
-    switch (InfoId) {
-    case OMP_INFOTYPE_KERNEL_ARGS:
-      return "KernelArgs";
-    case OMP_INFOTYPE_MAPPING_EXISTS:
-      return "MappingExists";
-    case OMP_INFOTYPE_DUMP_TABLE:
-      return "DumpTable";
-    case OMP_INFOTYPE_MAPPING_CHANGED:
-      return "MappingChanged";
-    case OMP_INFOTYPE_PLUGIN_KERNEL:
-      return "PluginKernel";
-    case OMP_INFOTYPE_DATA_TRANSFER:
-      return "DataTransfer";
-    case OMP_INFOTYPE_EMPTY_MAPPING:
-      return "EmptyMapping";
-    case OMP_INFOTYPE_ALL:
-      return "Default";
-    }
-    return static_cast<const char *>(nullptr);
-  };
-
-  constexpr const char *result = getId();
-  static_assert(result != nullptr, "Unknown InfoId being used");
-  return result;
-}
-
-// Transform the INFO id to the corresponding debug type and print the message
-#define INFO_DEBUG_INT(_flags, _id, ...)                                       \
-  ODBG(::llvm::omp::target::debug::InfoIdToODT<_flags>())                      \
-      << FORMAT_TO_STR(__VA_ARGS__);
-
 // Define default format for pointers
 static inline raw_ostream &operator<<(raw_ostream &Os, void *Ptr) {
   Os << ::llvm::format(DPxMOD, DPxPTR(Ptr));
   return Os;
 }
-
-#else
-
-#define INFO_DEBUG_INT(_flags, _id, ...)                                       \
-  {                                                                            \
-  }
-
 #endif // OMPTARGET_DEBUG
 
 // New REPORT macro in the same style as ODBG

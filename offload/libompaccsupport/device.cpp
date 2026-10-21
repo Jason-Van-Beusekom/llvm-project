@@ -71,7 +71,7 @@ DeviceTy::DeviceTy(GenericPluginTy *RTL, int32_t DeviceID, int32_t RTLDeviceID,
       DeviceHandle(DeviceHandle), PM(PM), MappingInfo(*this) {}
 
 DeviceTy::~DeviceTy() {
-  if (DeviceID == -1 || !(getInfoLevel() & OMP_INFOTYPE_DUMP_TABLE))
+  if (DeviceID == -1 || !SHOULD_PRINT_INFO(OMP_INFOTYPE_DUMP_TABLE))
     return;
 
   ident_t Loc = {0, 0, 0, 0, ";libomptarget;libomptarget;0;0;;"};
@@ -441,7 +441,7 @@ int32_t DeviceTy::submitData(void *TgtPtrBegin, void *HstPtrBegin, int64_t Size,
                              AsyncInfoTy &AsyncInfo, HostDataToTargetTy *Entry,
                              MappingInfoTy::HDTTMapAccessorTy *HDTTMapPtr,
                              const ident_t *Loc, const char *Name) {
-  if (getInfoLevel() & OMP_INFOTYPE_DATA_TRANSFER)
+  if (SHOULD_PRINT_INFO(OMP_INFOTYPE_DATA_TRANSFER))
     MappingInfo.printCopyInfo(TgtPtrBegin, HstPtrBegin, Size, /*H2D=*/true,
                               Entry, HDTTMapPtr, Loc, Name);
 
@@ -462,7 +462,7 @@ int32_t DeviceTy::retrieveData(void *HstPtrBegin, void *TgtPtrBegin,
                                HostDataToTargetTy *Entry,
                                MappingInfoTy::HDTTMapAccessorTy *HDTTMapPtr,
                                const ident_t *Loc) {
-  if (getInfoLevel() & OMP_INFOTYPE_DATA_TRANSFER)
+  if (SHOULD_PRINT_INFO(OMP_INFOTYPE_DATA_TRANSFER))
     MappingInfo.printCopyInfo(TgtPtrBegin, HstPtrBegin, Size, /*H2D=*/false,
                               Entry, HDTTMapPtr, Loc);
 
@@ -705,11 +705,11 @@ getKernelLaunchEnvironment(DeviceTy &Device, uint32_t OmpABIVersion,
     freeAfterSynchronization(Device, AsyncInfo, *ReductionAllocOrErr);
   }
 
-  INFO(OMP_INFOTYPE_DATA_TRANSFER, GenericDevice.getDeviceId(),
-       "Copying data from host to device, HstPtr=" DPxMOD ", TgtPtr=" DPxMOD
-       ", Size=%" PRId64 ", Name=KernelLaunchEnv\n",
-       DPxPTR(&LocalKLE), DPxPTR(*AllocOrErr),
-       sizeof(KernelLaunchEnvironmentTy));
+  INFO_LEVEL(2, OMP_INFOTYPE_DATA_TRANSFER, GenericDevice.getDeviceId(),
+            "Copying data from host to device, HstPtr=" DPxMOD ", TgtPtr=" DPxMOD
+            ", Size=%" PRId64 ", Name=KernelLaunchEnv\n",
+            DPxPTR(&LocalKLE), DPxPTR(*AllocOrErr),
+            sizeof(KernelLaunchEnvironmentTy));
 
   if (auto Err = GenericDevice.dataSubmit(
           *AllocOrErr, &LocalKLE, sizeof(KernelLaunchEnvironmentTy), AsyncInfo))

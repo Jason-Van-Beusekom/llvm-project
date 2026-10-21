@@ -23,22 +23,22 @@ void dumpTargetPointerMappings(const ident_t *Loc, DeviceTy &Device,
   MappingInfoTy::HDTTMapAccessorTy HDTTMap =
       Device.getMappingInfo().HostDataToTargetMap.getExclusiveAccessor();
   if (HDTTMap->empty()) {
-    DUMP_INFO(toStdOut, OMP_INFOTYPE_ALL, Device.DeviceID,
+    DUMP_INFO(toStdOut, OMP_INFOTYPE_DUMP_TABLE, Device.DeviceID,
               "OpenMP Host-Device pointer mappings table empty\n");
     return;
   }
 
   SourceInfo Kernel(Loc);
-  DUMP_INFO(toStdOut, OMP_INFOTYPE_ALL, Device.DeviceID,
+  DUMP_INFO(toStdOut, OMP_INFOTYPE_DUMP_TABLE, Device.DeviceID,
             "OpenMP Host-Device pointer mappings after block at %s:%d:%d:\n",
             Kernel.getFilename(), Kernel.getLine(), Kernel.getColumn());
-  DUMP_INFO(toStdOut, OMP_INFOTYPE_ALL, Device.DeviceID,
+  DUMP_INFO(toStdOut, OMP_INFOTYPE_DUMP_TABLE, Device.DeviceID,
             "%-18s %-18s %s %s %s %s\n", "Host Ptr", "Target Ptr", "Size (B)",
             "DynRefCount", "HoldRefCount", "Declaration");
   for (const auto &It : *HDTTMap) {
     HostDataToTargetTy &HDTT = *It.HDTT;
     SourceInfo Info(HDTT.HstPtrName);
-    DUMP_INFO(toStdOut, OMP_INFOTYPE_ALL, Device.DeviceID,
+    DUMP_INFO(toStdOut, OMP_INFOTYPE_DUMP_TABLE, Device.DeviceID,
               DPxMOD " " DPxMOD " %-8" PRIuPTR " %-11s %-12s %s at %s:%d:%d\n",
               DPxPTR(HDTT.HstPtrBegin), DPxPTR(HDTT.TgtPtrBegin),
               HDTT.HstPtrEnd - HDTT.HstPtrBegin,

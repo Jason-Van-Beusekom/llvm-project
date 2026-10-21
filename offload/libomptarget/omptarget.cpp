@@ -92,7 +92,7 @@ void handleTargetOutcome(bool Success, ident_t *Loc) {
     break;
   case OffloadPolicy::MANDATORY:
     if (!Success) {
-      if (getInfoLevel() & OMP_INFOTYPE_DUMP_TABLE) {
+      if (SHOULD_PRINT_INFO(OMP_INFOTYPE_DUMP_TABLE)) {
         auto ExclusiveDevicesAccessor = PM->getExclusiveDevicesAccessor();
         for (auto &Device : PM->devices(ExclusiveDevicesAccessor))
           dumpTargetPointerMappings(Loc, Device);
@@ -136,7 +136,7 @@ void handleTargetOutcome(bool Success, ident_t *Loc) {
       FATAL_MESSAGE0(
           1, "failure of target construct while offloading is mandatory");
     } else {
-      if (getInfoLevel() & OMP_INFOTYPE_DUMP_TABLE) {
+      if (SHOULD_PRINT_INFO(OMP_INFOTYPE_DUMP_TABLE)) {
         auto ExclusiveDevicesAccessor = PM->getExclusiveDevicesAccessor();
         for (auto &Device : PM->devices(ExclusiveDevicesAccessor))
           dumpTargetPointerMappings(Loc, Device);
@@ -708,7 +708,7 @@ int targetDataBegin(ident_t *Loc, DeviceTy &Device, int32_t ArgNum,
 
     // Check if variable can be used on the device:
     bool IsStructMember = ArgTypes[I] & OMP_TGT_MAPTYPE_MEMBER_OF;
-    if (getInfoLevel() & OMP_INFOTYPE_EMPTY_MAPPING && ArgTypes[I] != 0 &&
+    if (SHOULD_PRINT_INFO(OMP_INFOTYPE_EMPTY_MAPPING) && ArgTypes[I] != 0 &&
         !IsStructMember && !IsImplicit && !TPR.isPresent() &&
         !TPR.isContained() && !TPR.isHostPointer())
       INFO(OMP_INFOTYPE_EMPTY_MAPPING, Device.DeviceID,
