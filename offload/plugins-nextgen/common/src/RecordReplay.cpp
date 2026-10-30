@@ -67,7 +67,7 @@ Error RecordReplayTy::init(uint64_t MemSize, void *VAddr) {
   if (EC)
     return Plugin::error(ErrorCode::HOST_IO, "creating output directory");
 
-  INFO(OMP_INFOTYPE_PLUGIN_KERNEL, Device.getDeviceId(),
+  INFO(1, OMP_INFOTYPE_PLUGIN_KERNEL, Device.getDeviceId(),
        "%s initialized with starting address %p, "
        "memory size %" PRIu64 " bytes, and output directory in %s\n",
        Status == StatusTy::Recording ? "Record" : "Replay", StartAddr,
